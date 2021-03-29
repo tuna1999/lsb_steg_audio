@@ -1,4 +1,8 @@
 
+```
+pip3 install click
+```
+
 ```powershell
 PS D:\Code\Steg> py -3 .\main.py --help
 Usage: main.py [OPTIONS] COMMAND [ARGS]...
