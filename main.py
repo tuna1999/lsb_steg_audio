@@ -29,7 +29,7 @@ def steghide(audio, input, output, passw):
 		return
 	
 	# Mã hoá
-	file_data = encrypt(file_data, passw)
+	file_data = xorbytearray(file_data, passw)
 
 	# Thêm 4 byte vào dữ liệu để biểu thị độ dài dữ liệu được nhúng
 	len_data = len(file_data)
@@ -96,12 +96,12 @@ def recovery(audio, output, passw):
 		data.append(int(s,2))
 	
 	# giải mã
-	data = encrypt(data, passw)
+	data = xorbytearray(data, passw)
 
 	open(output, "wb").write(data)
 
 
-def encrypt(data,passw):
+def xorbytearray(data,passw):
 	if passw == b"":
 		return data
 	
