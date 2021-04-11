@@ -1,20 +1,9 @@
-"""
-Nguyen Anh Tu
-"""
-
 import wave
 import click
 
 @click.group()
 def cli():
 	pass
-
-
-def get_k(len_wav, len_data):
-	x = len_wav // len_data
-	for k in range(8,0,-1):
-		if x >= k:
-			return 8 - k + 1
 
 
 @cli.command(help="Nhúng thông tin")
@@ -32,7 +21,7 @@ def steghide(audio, input, output, passw):
 		return
 
 	try:
-		audio_data = wave.open(audio, mode="rb")
+		audio_data = wave.open(audio,mode="rb")
 		# lấy giải âm thanh và chuyển nó về định dạng bytearray
 		frame_bytes = bytearray(list(audio_data.readframes(audio_data.getnframes())))
 	except:
@@ -42,33 +31,27 @@ def steghide(audio, input, output, passw):
 	# Mã hoá
 	file_data = xorbytearray(file_data, passw)
 
-	k = get_k(len(frame_bytes), len(file_data) + 8)
-	print(f"k = {k}")
-	if k > 4:
+	# Thêm 4 byte vào dữ liệu để biểu thị độ dài dữ liệu được nhúng
+	len_data = len(file_data)
+	header = len_data.to_bytes(4,byteorder='big')
+
+	# chèn signature "tuna" để nhận biết việc nhúng tin
+	file_data = b"tuna" + header + file_data
+
+	if 8 * len(file_data) > len(frame_bytes):
 		print("[Lỗi] Dữ liệu cần nhúng quá lớn")
 		return
 
-	# chuyển thành binary list 
-	# bits = bin(k)[2:].rjust(4,"0")
-	bits = bin(len(file_data))[2:].rjust(32,"0")
-	# print(len(file_data))
+	bits = list()
 	for dat in file_data:
-		bits += bin(dat)[2:].rjust(8,"0") # Căn đủ 8 bit
+		tmp = bin(dat)[2:].rjust(8,"0") # Căn đủ 8 bit
+		for j in tmp:
+			bits.append(int(j))
+
+	# Thay đổi các bit cuối của từng frame
+	for i,bit in enumerate(bits):
+		frame_bytes[i] = (frame_bytes[i] & 0xFE) + bit
 	
-	# add padding
-	bits += "0" * (len(bits) % k)
-	# bits += "0" * (len(frame_bytes) * k - len(bits))
-
-	# Thay đổi k bit lsb của từng frame
-
-	for i in range(4):
-		frame_bytes[i]  = (frame_bytes[i] & 0xFE) | (k >> (3 - i))
-
-
-	for i in range(0,len(bits),k):
-		dat = int(bits[i:i+k],2)
-		frame_bytes[i//k + 4]  = (frame_bytes[i//k + 4] & ((0xFF << k) & 0xFF)) | dat
-		
 	frame_bytes_modified = bytes(frame_bytes)
 
 	# Tạo file wav mới
@@ -96,28 +79,24 @@ def recovery(audio, output, passw):
 		print(f"[Lỗi] {audio} không tồn tại")
 		return
 
-	# get k
-	k = [frame_bytes[i] & 1 for i in range(4)]
-	k = int("".join(map(str,k)),2)
-
-	print(f"k = {k}")
 	# Lấy các bit cuối cùng của từng frame
-	bits = ""
-	for i in range(4,len(frame_bytes)):
-		bits += bin(frame_bytes[i] & ((2 ** k) - 1))[2:].rjust(k,"0")
+	bits = [frame_byte & 1 for frame_byte in frame_bytes]
+
+	if "".join(map(str,bits[:32])) != "01110100011101010110111001100001":
+		print("[Lỗi] Tập tin không có tin được nhúng")
+		return
+	bits = bits[32:]
+	# Lấy độ dài dữ liệu được nhúng 
+	len_data = int("".join(map(str,bits[:32])),2)
 
 	# trích xuất dữ liệu
-	len_data = int(bits[:32],2)
-
-	# print(len_data)
-
 	data = bytearray()
-	for i in range(32,len_data * 8 + 32, 8):
-		data.append(int(bits[i:i+8],2))
+	for i in range(32,len_data * 8 + 32,8):
+		s = "".join(map(str,bits[i:i+8]))
+		data.append(int(s,2))
 	
 	# giải mã
 	data = xorbytearray(data, passw)
-	# data = data.rstrip(b"\x00")
 
 	open(output, "wb").write(data)
 
